@@ -95,8 +95,6 @@ int main(int argc, char **argv)
         size * sizeof(value_type), b,
         0, NULL, NULL));
 
-  CALL_CL_GUARDED(clFinish, (queue));
-
   get_timestamp(&time2);
   double elapsed = timestamp_diff_in_seconds(time1,time2);
   printf("transfer: %f s\n", elapsed);
