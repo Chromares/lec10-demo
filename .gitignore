@@ -26,3 +26,5 @@ fp-perf
 alignment
 lock-contention
 perf.data*
+opencl_profile*log
+opencl*profile*conf

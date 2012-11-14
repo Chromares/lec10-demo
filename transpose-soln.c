@@ -6,6 +6,8 @@
 
 typedef float value_type;
 
+// #define USE_PINNED
+
 int main(int argc, char **argv)
 {
   if (argc != 3)
@@ -22,6 +24,8 @@ int main(int argc, char **argv)
   cl_command_queue queue;
   create_context_on(CHOOSE_INTERACTIVELY, CHOOSE_INTERACTIVELY, 0, &ctx, &queue, 0);
 
+  cl_int status;
+
   // --------------------------------------------------------------------------
   // load kernels 
   // --------------------------------------------------------------------------
@@ -32,10 +36,31 @@ int main(int argc, char **argv)
   // --------------------------------------------------------------------------
   // allocate and initialize CPU memory
   // --------------------------------------------------------------------------
+#ifdef USE_PINNED
+  cl_mem buf_a_host = clCreateBuffer(ctx,
+      CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR,
+      sizeof(value_type) * size, 0, &status);
+  CHECK_CL_ERROR(status, "clCreateBuffer");
+  cl_mem buf_b_host = clCreateBuffer(ctx,
+      CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR,
+      sizeof(value_type) * size, 0, &status);
+  CHECK_CL_ERROR(status, "clCreateBuffer");
+
+  value_type *a = (value_type *) clEnqueueMapBuffer(queue, buf_a_host,
+      /*blocking*/ CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 
+      /*offs*/ 0, sizeof(value_type)*size, 0, NULL, NULL, &status);
+  CHECK_CL_ERROR(status, "clEnqueueMapBuffer");
+  value_type *b = (value_type *) clEnqueueMapBuffer(queue, buf_b_host,
+      /*blocking*/ CL_TRUE, CL_MAP_WRITE_INVALIDATE_REGION, 
+      /*offs*/ 0, sizeof(value_type)*size, 0, NULL, NULL, &status);
+  CHECK_CL_ERROR(status, "clEnqueueMapBuffer");
+
+#else
   value_type *a = (value_type *) malloc(sizeof(value_type) * size);
   if (!a) { perror("alloc x"); abort(); }
   value_type *b = (value_type *) malloc(sizeof(value_type) * size);
   if (!b) { perror("alloc y"); abort(); }
+#endif
 
   for (size_t j = 0; j < n; ++j)
     for (size_t i = 0; i < n; ++i)
@@ -44,7 +69,6 @@ int main(int argc, char **argv)
   // --------------------------------------------------------------------------
   // allocate device memory
   // --------------------------------------------------------------------------
-  cl_int status;
   cl_mem buf_a = clCreateBuffer(ctx, CL_MEM_READ_WRITE, 
       sizeof(value_type) * size, 0, &status);
   CHECK_CL_ERROR(status, "clCreateBuffer");
@@ -56,6 +80,11 @@ int main(int argc, char **argv)
   // --------------------------------------------------------------------------
   // transfer to device
   // --------------------------------------------------------------------------
+  CALL_CL_GUARDED(clFinish, (queue));
+
+  timestamp_type time1, time2;
+  get_timestamp(&time1);
+
   CALL_CL_GUARDED(clEnqueueWriteBuffer, (
         queue, buf_a, /*blocking*/ CL_FALSE, /*offset*/ 0,
         size * sizeof(value_type), a,
@@ -66,13 +95,21 @@ int main(int argc, char **argv)
         size * sizeof(value_type), b,
         0, NULL, NULL));
 
+  CALL_CL_GUARDED(clFinish, (queue));
+
+  get_timestamp(&time2);
+  double elapsed = timestamp_diff_in_seconds(time1,time2);
+  printf("transfer: %f s\n", elapsed);
+  printf("transfer: %f GB/s\n",
+      2*size*sizeof(value_type)/1e9/elapsed);
+
+
   // --------------------------------------------------------------------------
   // run code on device
   // --------------------------------------------------------------------------
 
   CALL_CL_GUARDED(clFinish, (queue));
 
-  timestamp_type time1, time2;
   get_timestamp(&time1);
 
   for (int trip = 0; trip < ntrips; ++trip)
@@ -89,7 +126,7 @@ int main(int argc, char **argv)
   CALL_CL_GUARDED(clFinish, (queue));
 
   get_timestamp(&time2);
-  value_type elapsed = timestamp_diff_in_seconds(time1,time2)/ntrips;
+  elapsed = timestamp_diff_in_seconds(time1,time2)/ntrips;
   printf("%f s\n", elapsed);
   printf("%f GB/s\n",
       2*size*sizeof(value_type)/1e9/elapsed);
@@ -119,5 +156,12 @@ int main(int argc, char **argv)
   CALL_CL_GUARDED(clReleaseCommandQueue, (queue));
   CALL_CL_GUARDED(clReleaseContext, (ctx));
 
+#ifdef USE_PINNED
+  CALL_CL_GUARDED(clReleaseMemObject, (buf_a_host));
+  CALL_CL_GUARDED(clReleaseMemObject, (buf_b_host));
+#else
+  free(a);
+  free(b);
+#endif
   return 0;
 }
