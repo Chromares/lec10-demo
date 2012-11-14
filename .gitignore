@@ -25,3 +25,4 @@ pipeline-perf-soln-o3
 fp-perf
 alignment
 lock-contention
+perf.data*
