@@ -1,7 +1,5 @@
 EXECUTABLES = \
-	mpi-bandwidth mpi-bi-bandwidth mpi-latency \
-	numa-test threads-vs-cache lock-contention \
-	transpose-soln
+	numa-test threads-vs-cache lock-contention
 
 all: $(EXECUTABLES)
 
@@ -13,9 +11,6 @@ threads-vs-cache: threads-vs-cache.c
 
 lock-contention: lock-contention.c
 	gcc -O0 -std=gnu99 -fopenmp $(DEBUG_FLAGS) -lrt -lm -o$@ $^
-
-transpose-soln: transpose-soln.c cl-helper.o
-	gcc -std=gnu99 -lrt -lOpenCL -o$@ $^
 
 %.o : %.c %.h
 	gcc -c -std=gnu99 $<
